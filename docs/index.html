@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kUrlObfushortner — Serverless URL Compression</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ HEADER ═══ -->
+<header>
+  <div class="container">
+    <div class="header-eyebrow">▶ v0.1</div>
+    <h1>k<span class="accent">Url</span>Obfu<span class="accent">shortner</span></h1>
+    <p class="header-sub">
+      Compress long URLs entirely client-side using DEFLATE + URL-safe Base64.
+      No server, no database. The compressed token <em>is</em> the data — decode
+      it anywhere you have JavaScript, PHP, Python, or C#. Pair with
+      <strong class="text-green">kUrlObfushortner-secure</strong> to
+      encrypt tokens with RSA-OAEP so only your server can decode them.
+    </p>
+    <span class="version-badge">v0.1 &nbsp;·&nbsp; js-only build</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ══════════════════════════════════════════ INCOMING URL ALERT ═══ -->
+  <div id="incoming-alert">
+    <div class="alert-label">⟳ &nbsp;Incoming compressed URL detected — decoded automatically</div>
+    <div class="alert-url">
+      <strong>Original (compressed):</strong><br>
+      <span id="alert-original"></span>
+    </div>
+    <div class="alert-url mt-2">
+      <strong>Decoded:</strong><br>
+      <span id="alert-decoded"></span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 1 ═══ -->
+  <section class="section" id="sec-how">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>How it works</h2>
+    </div>
+
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="step-num">01</div>
+        <h4>Take a long URL</h4>
+        <p>Any URL with a hefty query string — analytics params, filter state, coordinates, whatever.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">02</div>
+        <h4>DEFLATE compress</h4>
+        <p>The query string is compressed with DEFLATE (level 9) via <em>pako</em>. Query strings are highly repetitive — they compress well.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">03</div>
+        <h4>URL-safe Base64</h4>
+        <p>The binary output is encoded to URL-safe Base64 (<code>-_</code> instead of <code>+/</code>, no padding) and placed in a single <code>?_k=</code> param.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">04</div>
+        <h4>Decode anywhere</h4>
+        <p>Any receiver that knows the scheme can reverse it: Base64-decode, DEFLATE-inflate, restore the query string. No server lookup needed.</p>
+      </div>
+    </div>
+
+    <p class="note mt-3">
+      ⚠ Compression only pays off for longer query strings (&gt;~80 chars). Short
+      URLs may actually grow slightly after encoding — the stats panels will tell
+      you exactly how much you're saving (or spending).
+    </p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 2 ═══ -->
+  <section class="section" id="sec-encode">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2>Demo — Encode a URL</h2>
+    </div>
+
+    <p class="section-desc">
+      Paste any URL below and click <strong>Encode</strong> to compress its query string.
+    </p>
+
+    <div class="panel">
+      <div class="panel-label">Input</div>
+      <div class="field">
+        <label for="encode-input">URL to compress</label>
+        <textarea id="encode-input" rows="4"
+          placeholder="https://example.com/?foo=bar&baz=qux&long=param..."></textarea>
+      </div>
+      <div class="flex-row">
+        <button class="btn btn-primary" onclick="runEncode()">↓ Encode</button>
+        <button class="btn btn-ghost" onclick="loadExample('encode')">Load example URL</button>
+      </div>
+    </div>
+
+    <div class="result-block" id="encode-result">
+      <div class="panel-label">Compressed URL</div>
+      <div class="result-url" id="encode-output"></div>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-label">Original length</span>
+          <span class="stat-value" id="encode-len-orig">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Compressed length</span>
+          <span class="stat-value" id="encode-len-comp">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Characters saved</span>
+          <span class="stat-value" id="encode-saved">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Reduction</span>
+          <span class="stat-value" id="encode-pct">—</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 3 ═══ -->
+  <section class="section" id="sec-decode">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2>Demo — Decode a URL</h2>
+    </div>
+
+    <p class="section-desc">
+      Paste a compressed URL (containing <code>?_k=&hellip;</code>) to reconstruct the original.
+    </p>
+
+    <div class="panel">
+      <div class="panel-label">Input</div>
+      <div class="field">
+        <label for="decode-input">Compressed URL</label>
+        <textarea id="decode-input" rows="3"
+          placeholder="https://example.com/?_k=1..."></textarea>
+      </div>
+      <div class="flex-row">
+        <button class="btn btn-primary" onclick="runDecode()">↑ Decode</button>
+        <button class="btn btn-ghost" onclick="loadExample('decode')">Load example token</button>
+      </div>
+    </div>
+
+    <div class="result-block" id="decode-result">
+      <div class="panel-label">Decoded URL</div>
+      <div class="result-url" id="decode-output"></div>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-label">Token length</span>
+          <span class="stat-value" id="decode-len-comp">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Decoded length</span>
+          <span class="stat-value" id="decode-len-orig">—</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 4 ═══ -->
+  <section class="section" id="sec-builder">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2>Demo — Live URL Builder</h2>
+    </div>
+
+    <p class="section-desc">
+      Construct a URL from parts. The compressed version will open <em>this page</em>
+      in a new tab — which will auto-detect and decode the <code>_k</code> parameter,
+      displaying the result at the top of the page.
+    </p>
+
+    <div class="panel">
+      <div class="panel-label">Builder</div>
+
+      <div class="field">
+        <label for="builder-base">Base URL (origin + path)</label>
+        <input type="text" id="builder-base" placeholder="https://example.com/page" />
+      </div>
+
+      <div class="field">
+        <label for="builder-qs">Query string (without leading <code>?</code>)</label>
+        <textarea id="builder-qs" rows="3"
+          placeholder="region=us&metric=mpg_us&dist=9&hwy=88&price=5.89&o=Thousand+Oaks%2C+California"></textarea>
+      </div>
+
+      <div class="flex-row mt-2">
+        <button class="btn btn-secondary" onclick="updateBuilder()">Preview</button>
+        <button class="btn btn-ghost" onclick="loadExample('builder')">Load full example</button>
+      </div>
+    </div>
+
+    <div id="builder-previews">
+      <div class="url-preview-row">
+        <span class="label">Original URL</span>
+        <span class="url-text" id="builder-original"></span>
+      </div>
+      <div class="url-preview-row">
+        <span class="label">Original length</span>
+        <span class="url-text text-dim" id="builder-orig-len"></span>
+      </div>
+      <div class="url-preview-row compressed">
+        <span class="label">Compressed URL — click to open in new tab (this page will decode it)</span>
+        <span class="url-text" id="builder-compressed"></span>
+      </div>
+      <div class="url-preview-row">
+        <span class="label">Compressed length &amp; savings</span>
+        <span class="url-text text-dim" id="builder-comp-stats"></span>
+      </div>
+    </div>
+
+    <p class="note mt-2">
+      Note: clicking the compressed URL opens <em>this page</em> (index.html) with the
+      <code>_k</code> param. The receiving server must know how to handle compressed URLs
+      for the decoded path to actually load the right content — this demo only shows the
+      round-trip decode within this page.
+    </p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 5 ═══ -->
+  <section class="section" id="sec-api">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2>JavaScript API Reference</h2>
+    </div>
+
+    <div class="panel">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Function</th>
+            <th>Parameters</th>
+            <th>Returns</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>encode(longUrl)</td>
+            <td><code>longUrl: string</code></td>
+            <td><code>string</code></td>
+            <td>Compresses the query string of a URL into a single <code>_k</code> parameter.</td>
+          </tr>
+          <tr>
+            <td>decode(shortUrl)</td>
+            <td><code>shortUrl: string</code></td>
+            <td><code>string</code></td>
+            <td>Reconstructs the original URL from a compressed <code>_k</code> parameter.</td>
+          </tr>
+          <tr>
+            <td>applyDecodedUrl(options)</td>
+            <td><code>options?: { replaceAddressBar?: boolean }</code></td>
+            <td><code>{ original, decoded } | null</code></td>
+            <td>Detects and decodes a <code>_k</code> param in the <em>current</em> page URL. Optionally rewrites the address bar. Fires <code>kurlobfushortner:decoded</code> event.</td>
+          </tr>
+          <tr>
+            <td>stats(longUrl)</td>
+            <td><code>longUrl: string</code></td>
+            <td><code>object</code></td>
+            <td>Returns <code>{ longUrl, shortUrl, longLen, shortLen, saving, savingPct }</code> for display.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 6 ═══ -->
+  <section class="section" id="sec-docs">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2>Integration Code Snippets</h2>
+    </div>
+
+    <p class="section-desc">
+      All snippets implement the same algorithm: DEFLATE-raw compress the query string,
+      encode to URL-safe Base64, prefix with version byte <code>"1"</code>.
+      To decode: strip version, URL-safe Base64 decode, DEFLATE-raw inflate.
+    </p>
+
+    <!-- Tab bar -->
+    <div class="tab-bar" id="base-tabs">
+      <button class="tab-btn active" onclick="switchBaseTab('js')"     >JavaScript (Browser)</button>
+      <button class="tab-btn"        onclick="switchBaseTab('node')"   >Node.js (Server)</button>
+      <button class="tab-btn"        onclick="switchBaseTab('php')"    >PHP</button>
+      <button class="tab-btn"        onclick="switchBaseTab('python')" >Python</button>
+      <button class="tab-btn"        onclick="switchBaseTab('csharp')" >C#</button>
+    </div>
+
+    <!-- JavaScript / Browser tab -->
+    <div class="tab-panel active" id="btab-js">
+      <div class="doc-card">
+        <div class="doc-card-lang">JavaScript / Browser</div>
+        <h3>Encode &amp; Decode</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snippet-js"><span class="cm">// Requires pako (DEFLATE library)</span>
+<span class="cm">// &lt;script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"&gt;&lt;/script&gt;</span>
+<span class="cm">// &lt;script src="kUrlObfushortner.js"&gt;&lt;/script&gt;</span>
+
+<span class="cm">// Encode</span>
+<span class="kw">const</span> short = kUrlObfushortner.<span class="fn">encode</span>(longUrl);
+
+<span class="cm">// Decode</span>
+<span class="kw">const</span> long = kUrlObfushortner.<span class="fn">decode</span>(shortUrl);
+
+<span class="cm">// Auto-apply on page load (e.g. in a DOMContentLoaded handler)</span>
+<span class="kw">const</span> result = kUrlObfushortner.<span class="fn">applyDecodedUrl</span>({
+  replaceAddressBar: <span class="kw">true</span>
+});
+<span class="kw">if</span> (result) {
+  console.<span class="fn">log</span>(<span class="str">'Decoded:'</span>, result.decoded);
+}
+
+<span class="cm">// Or listen to the event</span>
+window.<span class="fn">addEventListener</span>(<span class="str">'kurlobfushortner:decoded'</span>, (e) =&gt; {
+  console.<span class="fn">log</span>(e.detail.decoded);
+});</pre>
+          <button class="copy-btn" onclick="copySnippet('snippet-js', this)">Copy</button>
+        </div>
+      </div>
+    </div><!-- /btab-js -->
+
+    <!-- PHP tab -->
+    <div class="tab-panel" id="btab-php">
+      <div class="doc-card">
+        <div class="doc-card-lang">PHP 8+</div>
+        <h3>Encode &amp; Decode</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snippet-php"><span class="cm">&lt;?php</span>
+<span class="cm">// Requires the php-zlib extension (enabled by default)</span>
+
+<span class="kw">function</span> <span class="fn">kurlEncode</span>(<span class="ty">string</span> $url): <span class="ty">string</span> {
+  $parsed = <span class="fn">parse_url</span>($url);
+  $qs = $parsed[<span class="str">'query'</span>] ?? <span class="str">''</span>;
+  <span class="kw">if</span> (!$qs) <span class="kw">return</span> $url;
+
+  <span class="cm">// deflate-raw (wbits = -15)</span>
+  $compressed = <span class="fn">gzdeflate</span>($qs, 9);
+  $token = <span class="str">'1'</span> . <span class="fn">rtrim</span>(
+    <span class="fn">strtr</span>(<span class="fn">base64_encode</span>($compressed), <span class="str">'+/'</span>, <span class="str">'-_'</span>), <span class="str">'='</span>
+  );
+  $base = $parsed[<span class="str">'scheme'</span>] . <span class="str">'://'</span>
+        . $parsed[<span class="str">'host'</span>]
+        . ($parsed[<span class="str">'path'</span>] ?? <span class="str">'/'</span>);
+  <span class="kw">return</span> $base . <span class="str">'?_k='</span> . <span class="fn">rawurlencode</span>($token);
+}
+
+<span class="kw">function</span> <span class="fn">kurlDecode</span>(<span class="ty">string</span> $url): <span class="ty">string</span> {
+  <span class="fn">parse_str</span>(<span class="fn">parse_url</span>($url, PHP_URL_QUERY), $params);
+  $token = $params[<span class="str">'_k'</span>] ?? <span class="str">''</span>;
+  <span class="kw">if</span> (!$token) <span class="kw">return</span> $url;
+
+  $payload = <span class="fn">substr</span>($token, 1); <span class="cm">// strip version</span>
+  $pad = <span class="fn">str_repeat</span>(<span class="str">'='</span>, (4 - <span class="fn">strlen</span>($payload) % 4) % 4);
+  $b64 = <span class="fn">strtr</span>($payload . $pad, <span class="str">'-_'</span>, <span class="str">'+/'</span>);
+  $qs  = <span class="fn">gzinflate</span>(<span class="fn">base64_decode</span>($b64));
+  $parsed = <span class="fn">parse_url</span>($url);
+  $base = $parsed[<span class="str">'scheme'</span>] . <span class="str">'://'</span>
+        . $parsed[<span class="str">'host'</span>]
+        . ($parsed[<span class="str">'path'</span>] ?? <span class="str">'/'</span>);
+  <span class="kw">return</span> $base . <span class="str">'?'</span> . $qs;
+}</pre>
+          <button class="copy-btn" onclick="copySnippet('snippet-php', this)">Copy</button>
+        </div>
+      </div>
+    </div><!-- /btab-php -->
+
+    <!-- Python tab -->
+    <div class="tab-panel" id="btab-python">
+      <div class="doc-card">
+        <div class="doc-card-lang">Python 3</div>
+        <h3>Encode &amp; Decode</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snippet-py"><span class="kw">import</span> zlib, base64
+<span class="kw">from</span> urllib.parse <span class="kw">import</span> urlparse, urlencode, quote
+
+<span class="kw">def</span> <span class="fn">kurl_encode</span>(url: <span class="ty">str</span>) -> <span class="ty">str</span>:
+    p = <span class="fn">urlparse</span>(url)
+    qs = p.query
+    <span class="kw">if not</span> qs:
+        <span class="kw">return</span> url
+    compressed = zlib.<span class="fn">compress</span>(qs.<span class="fn">encode</span>(), 9)[2:-4]  <span class="cm"># raw deflate</span>
+    b64 = base64.<span class="fn">urlsafe_b64encode</span>(compressed).<span class="fn">rstrip</span>(b<span class="str">'='</span>).<span class="fn">decode</span>()
+    token = <span class="str">'1'</span> + b64
+    base = <span class="fn">f</span><span class="str">"{p.scheme}://{p.netloc}{p.path}"</span>
+    <span class="kw">return</span> <span class="fn">f</span><span class="str">"{base}?_k={quote(token)}"</span>
+
+<span class="kw">def</span> <span class="fn">kurl_decode</span>(url: <span class="ty">str</span>) -> <span class="ty">str</span>:
+    p = <span class="fn">urlparse</span>(url)
+    params = <span class="fn">dict</span>(pair.<span class="fn">split</span>(<span class="str">'='</span>, 1)
+               <span class="kw">for</span> pair <span class="kw">in</span> p.query.<span class="fn">split</span>(<span class="str">'&'</span>) <span class="kw">if</span> <span class="str">'='</span> <span class="kw">in</span> pair)
+    token = params.<span class="fn">get</span>(<span class="str">'_k'</span>, <span class="str">''</span>)
+    <span class="kw">if not</span> token:
+        <span class="kw">return</span> url
+    payload = token[1:]  <span class="cm"># strip version char</span>
+    pad = <span class="str">'='</span> * ((4 - <span class="fn">len</span>(payload) % 4) % 4)
+    compressed = base64.<span class="fn">urlsafe_b64decode</span>(payload + pad)
+    <span class="cm"># wrap as zlib stream for inflate</span>
+    qs = zlib.<span class="fn">decompress</span>(compressed, -15).<span class="fn">decode</span>()
+    base = <span class="fn">f</span><span class="str">"{p.scheme}://{p.netloc}{p.path}"</span>
+    <span class="kw">return</span> <span class="fn">f</span><span class="str">"{base}?{qs}"</span></pre>
+          <button class="copy-btn" onclick="copySnippet('snippet-py', this)">Copy</button>
+        </div>
+      </div>
+    </div><!-- /btab-python -->
+
+    <!-- C# tab -->
+    <div class="tab-panel" id="btab-csharp">
+      <div class="doc-card">
+        <div class="doc-card-lang">C# / .NET 6+</div>
+        <h3>Encode &amp; Decode</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snippet-cs"><span class="kw">using</span> System.IO.Compression;
+<span class="kw">using</span> System.Text;
+
+<span class="kw">public static class</span> <span class="ty">KUrlObfushortner</span>
+{
+  <span class="kw">public static string</span> <span class="fn">Encode</span>(<span class="kw">string</span> url)
+  {
+    <span class="kw">var</span> uri = <span class="kw">new</span> <span class="ty">Uri</span>(url);
+    <span class="kw">var</span> qs = uri.Query; <span class="cm">// includes leading "?"</span>
+    <span class="kw">if</span> (<span class="kw">string</span>.<span class="fn">IsNullOrEmpty</span>(qs)) <span class="kw">return</span> url;
+
+    <span class="kw">var</span> bytes = <span class="ty">Encoding</span>.UTF8.<span class="fn">GetBytes</span>(qs);
+    <span class="kw">using var</span> ms = <span class="kw">new</span> <span class="ty">MemoryStream</span>();
+    <span class="kw">using</span> (<span class="kw">var</span> ds = <span class="kw">new</span> <span class="ty">DeflateStream</span>(ms, <span class="ty">CompressionLevel</span>.SmallestSize))
+      ds.<span class="fn">Write</span>(bytes, 0, bytes.Length);
+
+    <span class="kw">var</span> token = <span class="str">"1"</span> + <span class="ty">Convert</span>
+      .<span class="fn">ToBase64String</span>(ms.<span class="fn">ToArray</span>())
+      .<span class="fn">Replace</span>(<span class="str">'+'</span>, <span class="str">'-'</span>).<span class="fn">Replace</span>(<span class="str">'/'</span>, <span class="str">'_'</span>)
+      .<span class="fn">TrimEnd</span>(<span class="str">'='</span>);
+
+    <span class="kw">var</span> base_ = <span class="str">$"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}"</span>;
+    <span class="kw">return</span> <span class="str">$"{base_}?_k={Uri.EscapeDataString(token)}"</span>;
+  }
+
+  <span class="kw">public static string</span> <span class="fn">Decode</span>(<span class="kw">string</span> url)
+  {
+    <span class="kw">var</span> uri   = <span class="kw">new</span> <span class="ty">Uri</span>(url);
+    <span class="kw">var</span> query = System.Web.<span class="ty">HttpUtility</span>.<span class="fn">ParseQueryString</span>(uri.Query);
+    <span class="kw">var</span> token = query[<span class="str">"_k"</span>];
+    <span class="kw">if</span> (token == <span class="kw">null</span>) <span class="kw">return</span> url;
+
+    <span class="kw">var</span> payload = token[1..]; <span class="cm">// strip version</span>
+    <span class="kw">var</span> pad = <span class="kw">new string</span>(<span class="str">'='</span>, (4 - payload.Length % 4) % 4);
+    <span class="kw">var</span> b64 = payload.<span class="fn">Replace</span>(<span class="str">'-'</span>, <span class="str">'+'</span>).<span class="fn">Replace</span>(<span class="str">'_'</span>, <span class="str">'/'</span>) + pad;
+    <span class="kw">var</span> compressed = <span class="ty">Convert</span>.<span class="fn">FromBase64String</span>(b64);
+
+    <span class="kw">using var</span> ms = <span class="kw">new</span> <span class="ty">MemoryStream</span>(compressed);
+    <span class="kw">using var</span> ds = <span class="kw">new</span> <span class="ty">DeflateStream</span>(ms, <span class="ty">CompressionMode</span>.Decompress);
+    <span class="kw">using var</span> sr = <span class="kw">new</span> <span class="ty">StreamReader</span>(ds, <span class="ty">Encoding</span>.UTF8);
+    <span class="kw">var</span> qs = sr.<span class="fn">ReadToEnd</span>();
+
+    <span class="kw">var</span> base_ = <span class="str">$"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}"</span>;
+    <span class="kw">return</span> base_ + qs;
+  }
+}</pre>
+          <button class="copy-btn" onclick="copySnippet('snippet-cs', this)">Copy</button>
+        </div>
+      </div>
+    </div><!-- /btab-csharp -->
+
+    <!-- Node.js tab -->
+    <div class="tab-panel" id="btab-node">
+      <div class="doc-card">
+        <div class="doc-card-lang">Node.js (server-side)</div>
+      <h3>Using the same library on the server with pako</h3>
+      <div class="code-wrap">
+        <pre class="code-block" id="snippet-node"><span class="cm">// npm install pako</span>
+<span class="kw">const</span> pako = <span class="fn">require</span>(<span class="str">'pako'</span>);
+
+<span class="cm">// Paste the kUrlObfushortner.js source here, or:</span>
+<span class="kw">const</span> { kUrlObfushortner } = <span class="fn">require</span>(<span class="str">'./kUrlObfushortner'</span>);
+
+<span class="kw">const</span> short = kUrlObfushortner.<span class="fn">encode</span>(longUrl);
+<span class="kw">const</span> long  = kUrlObfushortner.<span class="fn">decode</span>(shortUrl);
+
+<span class="cm">// Express middleware example — auto-decode incoming compressed URLs</span>
+app.<span class="fn">use</span>((req, res, next) =&gt; {
+  <span class="kw">if</span> (req.query._k) {
+    <span class="kw">const</span> decoded = kUrlObfushortner.<span class="fn">decode</span>(
+      <span class="str">`https://</span>${req.headers.host}${req.url}<span class="str">`</span>
+    );
+    <span class="kw">const</span> url = <span class="kw">new</span> URL(decoded);
+    req.url = url.pathname + url.search;
+  }
+  <span class="fn">next</span>();
+});</pre>
+        <button class="copy-btn" onclick="copySnippet('snippet-node', this)">Copy</button>
+      </div>
+      </div>
+    </div><!-- /btab-node -->
+
+  </section><!-- /sec-docs -->
+
+  <!-- ══════════════════════════════════════════════════ SECTION 7 ═══ -->
+  <section class="section" id="sec-limits">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2>Limitations &amp; Roadmap (Base Plugin)</h2>
+    </div>
+    <div class="panel">
+      <p class="section-desc mb-14px">Current limitations of the base plugin:</p>
+      <div class="how-steps compact">
+        <div class="how-step">
+          <h4>Compressed, not encrypted</h4>
+          <p>The base token is DEFLATE + Base64 only. Anyone who knows the scheme can decode it. Use <code>kUrlObfushortner-secure</code> for confidentiality.</p>
+        </div>
+        <div class="how-step">
+          <h4>Server must cooperate</h4>
+          <p>The receiving server must recognise <code>_k</code> and decode it (or serve the JS that does). This demo page acts as its own receiver.</p>
+        </div>
+        <div class="how-step">
+          <h4>Short URLs may grow</h4>
+          <p>Very short query strings (&lt;~80 chars) may expand slightly due to Base64 overhead. Check the stats panel before deploying.</p>
+        </div>
+        <div class="how-step">
+          <h4>Browser &amp; Node.js only</h4>
+          <p>Relies on <code>btoa</code>/<code>atob</code> and pako. Server-side ports for PHP/Python/C# provided in snippets above.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════ SECURE PLUGIN DIVIDER ═══════ -->
+  <div class="plugin-divider">
+    <span class="plugin-divider-label">
+      ▼ &nbsp; kUrlObfushortner-secure &nbsp; ▼
+    </span>
+  </div>
+
+  <div class="secure-hero">
+    <div class="header-eyebrow">▶ plugin · rsa-oaep encryption</div>
+    <h1 class="plugin-title">k<span class="text-amber">Url</span>Obfu<span class="text-amber">shortner</span><span class="text-green">-secure</span></h1>
+    <p class="header-sub">
+      An encryption layer on top of the base plugin. The browser encrypts the
+      compressed token with your RSA public key — only your server, holding the
+      private key, can decrypt it. Tokens are opaque to anyone without the key.
+    </p>
+    <span class="version-badge">v0.1 &nbsp;·&nbsp; rsa-oaep + sha-256 &nbsp;·&nbsp; web crypto api</span>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 8 ═══ -->
+  <section class="section" id="sec-secure-overview">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <h2>Secure Plugin — Overview &amp; Architecture</h2>
+      <span class="secure-badge">🔒 RSA-OAEP</span>
+    </div>
+
+    <p class="section-desc">
+      <code>kUrlObfushortner-secure.js</code> wraps the base plugin and adds RSA-OAEP asymmetric
+      encryption via the browser's native Web Crypto API. The public key lives in the browser;
+      the private key never leaves your server. Decryption <strong>must</strong> happen server-side.
+    </p>
+
+    <div class="flow-diagram">
+      <div class="flow-step">Long URL</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step highlight">DEFLATE + Base64url<br><small class="flow-sub">kUrlObfushortner</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step secure">RSA-OAEP encrypt<br><small class="flow-sub">public key</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step secure">Base64url ciphertext<br><small class="flow-sub">?_ks=…</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">Browser sends URL</div>
+    </div>
+    <div class="flow-diagram tight">
+      <div class="flow-step">Server receives ?_ks=</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step secure">RSA-OAEP decrypt<br><small class="flow-sub">private key</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step highlight">DEFLATE inflate<br><small class="flow-sub">kUrlObfushortner</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">Original query string</div>
+    </div>
+
+    <div class="panel mt-3">
+      <div class="panel-label">Key technical details</div>
+      <table class="api-table">
+        <thead><tr><th>Property</th><th>Value</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Algorithm</td><td><code>RSA-OAEP</code></td><td>Asymmetric — encrypt with public, decrypt with private</td></tr>
+          <tr><td>Hash</td><td><code>SHA-256</code></td><td>Used internally by OAEP padding</td></tr>
+          <tr><td>Key size</td><td><code>2048 or 4096 bit</code></td><td>2048-bit max plaintext: 190 bytes. 4096-bit: 446 bytes</td></tr>
+          <tr><td>Client param</td><td><code>?_ks=</code></td><td>URL-safe Base64 RSA ciphertext</td></tr>
+          <tr><td>HMAC param</td><td><code>?_kh=</code> (optional)</td><td>HMAC-SHA256 integrity signature</td></tr>
+          <tr><td>Public key format</td><td>PEM / SPKI</td><td><code>-----BEGIN PUBLIC KEY-----</code></td></tr>
+          <tr><td>Private key format</td><td>PEM / PKCS#8</td><td><code>-----BEGIN PRIVATE KEY-----</code> — server only</td></tr>
+          <tr><td>API</td><td>Web Crypto (SubtleCrypto)</td><td>Modern browsers + Node.js 18+ — in a secure context (HTTPS or <code>http://localhost</code>); not <code>file://</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note mt-2">
+      ⚠ RSA-OAEP ciphertext is always the same size as the key modulus (256 bytes for 2048-bit,
+      512 for 4096-bit) — the encrypted URL will always be <em>longer</em> than the compressed one.
+      The tradeoff is confidentiality: without the private key, the original URL is unrecoverable.
+    </p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════ SECTION 9 ═══ -->
+  <section class="section" id="sec-secure-keygen">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <h2>Key Generation</h2>
+      <span class="secure-badge">🔒 Web Crypto</span>
+    </div>
+
+    <p class="section-desc">
+      Generate a key pair here to test with. In production, generate keys server-side
+      and only ever put the <strong>public key</strong> in your front-end code.
+    </p>
+
+    <div class="panel">
+      <div class="panel-label">Generate RSA-OAEP Key Pair</div>
+      <div class="flex-row">
+        <button class="btn btn-primary" onclick="generateKeys(2048)">Generate 2048-bit pair</button>
+        <button class="btn btn-secondary" onclick="generateKeys(4096)">Generate 4096-bit pair</button>
+        <span id="keygen-spinner" class="blink">⟳ Generating…</span>
+      </div>
+
+      <div class="keygen-output" id="keygen-output">
+        <div class="key-block">
+          <div class="key-label public">▲ Public Key — embed in your front-end JavaScript</div>
+          <div id="pub-key-display"></div>
+          <button class="copy-btn" onclick="copyText('pub-key-display', this)">Copy</button>
+        </div>
+        <div class="key-block">
+          <div class="key-label private">▼ Private Key — store on your server only. Never expose this.</div>
+          <div id="priv-key-display"></div>
+          <button class="copy-btn" onclick="copyText('priv-key-display', this)">Copy</button>
+        </div>
+        <div class="danger-badge mt-6px">
+          ⚠ These keys are generated in your browser and never sent anywhere — but store them securely
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════════════════════════════════════════ SECTION 10 ═══ -->
+  <section class="section" id="sec-secure-demo-encode">
+    <div class="section-header">
+      <span class="section-num">10</span>
+      <h2>Demo — Secure Encode</h2>
+      <span class="secure-badge">🔒 Client-side encrypt</span>
+    </div>
+
+    <p class="section-desc">
+      Paste a public key PEM and a URL to produce an encrypted <code>?_ks=</code> URL.
+      This URL can only be decoded by a server holding the matching private key.
+    </p>
+
+    <div class="panel">
+      <div class="panel-label">Input</div>
+      <div class="field">
+        <label for="secure-pubkey">Public Key (PEM)</label>
+        <textarea id="secure-pubkey" rows="5" placeholder="-----BEGIN PUBLIC KEY-----&#10;MIIBIjANBgkqhkiG9...&#10;-----END PUBLIC KEY-----"></textarea>
+      </div>
+      <div class="field">
+        <label for="secure-url-input">URL to encrypt</label>
+        <textarea id="secure-url-input" rows="3" placeholder="https://example.com/?foo=bar&baz=qux..."></textarea>
+      </div>
+      <div class="flex-row">
+        <button class="btn btn-primary" onclick="runSecureEncode()">🔒 Encrypt URL</button>
+        <button class="btn btn-ghost" onclick="useGeneratedKey()">Use generated key from §09</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('secure-url-input').value = EXAMPLE_LONG_URL">Load example URL</button>
+      </div>
+    </div>
+
+    <div class="result-block" id="secure-encode-result">
+      <div class="panel-label">Encrypted URL <span class="secure-badge ml-8px">?_ks=</span></div>
+      <div class="result-url" id="secure-encode-output"></div>
+      <div class="stats-row">
+        <div class="stat"><span class="stat-label">Original URL</span><span class="stat-value" id="se-len-orig">—</span></div>
+        <div class="stat"><span class="stat-label">DEFLATE bytes</span><span class="stat-value" id="se-deflate-bytes">—</span></div>
+        <div class="stat"><span class="stat-label">Plaintext to encrypt</span><span class="stat-value" id="se-plaintext-bytes">—</span></div>
+        <div class="stat"><span class="stat-label">Key size needed</span><span class="stat-value" id="se-key-needed">—</span></div>
+        <div class="stat"><span class="stat-label">Encrypted URL length</span><span class="stat-value" id="se-len-enc">—</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════════════════════════════════════════ SECTION 11 ═══ -->
+  <section class="section" id="sec-secure-demo-decode">
+    <div class="section-header">
+      <span class="section-num">11</span>
+      <h2>Demo — Secure Decode</h2>
+      <span class="warning-badge">⏳ Coming Soon</span>
+    </div>
+
+    <p class="section-desc">
+      Decryption of <code>?_ks=</code> URLs requires a server holding the RSA private key.
+      The live demo will be available once a server endpoint is configured.
+    </p>
+
+    <div class="coming-soon-panel">
+      <div class="coming-soon-icon">🔐</div>
+      <h3>Server-side decryption demo — coming soon</h3>
+      <p>
+        This demo will send the encrypted URL to a server endpoint which holds the private key,
+        decrypts the ciphertext, and returns the original query string via AJAX. A server and
+        key pair must be configured before this can be activated.
+      </p>
+    </div>
+
+    <p class="note mt-2">
+      See §12 below for the server-side code you'll need to implement to receive and decrypt
+      these URLs in PHP, Python, Node.js, and C#.
+    </p>
+  </section>
+
+  <!-- ═════════════════════════════════════════════════ SECTION 12 ═══ -->
+  <section class="section" id="sec-secure-snippets">
+    <div class="section-header">
+      <span class="section-num">12</span>
+      <h2>Secure Integration Snippets</h2>
+      <span class="secure-badge">🔒 Server-side decryption</span>
+    </div>
+
+    <p class="section-desc">
+      All snippets show two patterns: (A) direct server-side arrival — the user navigates
+      to a URL with <code>?_ks=</code> and the server decodes it before rendering; and
+      (B) AJAX decode — a JavaScript page sends the encrypted token to a decode endpoint
+      and receives the original query string in response.
+    </p>
+
+    <!-- Tab bar -->
+    <div class="tab-bar" id="secure-tabs">
+      <button class="tab-btn active" onclick="switchTab('js')"     >JavaScript (Client)</button>
+      <button class="tab-btn"        onclick="switchTab('node')"   >Node.js (Server)</button>
+      <button class="tab-btn"        onclick="switchTab('php')"    >PHP</button>
+      <button class="tab-btn"        onclick="switchTab('python')" >Python</button>
+      <button class="tab-btn"        onclick="switchTab('csharp')" >C#</button>
+    </div>
+
+    <!-- ── JS Client tab ─────────────────────────────────────────────── -->
+    <div class="tab-panel active" id="tab-js">
+      <div class="doc-card">
+        <div class="doc-card-lang">JavaScript — Browser (encoding)</div>
+        <h3>Encrypt a URL with a public key</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-js-enc"><span class="cm">// Include both scripts:</span>
+<span class="cm">// &lt;script src="pako.min.js"&gt;&lt;/script&gt;</span>
+<span class="cm">// &lt;script src="kUrlObfushortner.js"&gt;&lt;/script&gt;</span>
+<span class="cm">// &lt;script src="kUrlObfushortner-secure.js"&gt;&lt;/script&gt;</span>
+
+<span class="kw">const</span> publicKeyPem = <span class="str">`-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+-----END PUBLIC KEY-----`</span>;
+
+<span class="cm">// Basic encrypt — no HMAC</span>
+<span class="kw">const</span> secureUrl = <span class="kw">await</span> kUrlObfushortnerSecure.<span class="fn">encodeSecure</span>(
+  longUrl,
+  publicKeyPem
+);
+<span class="cm">// → "https://example.com/?_ks=Abc123..."</span>
+
+<span class="cm">// With optional HMAC integrity signature</span>
+<span class="kw">const</span> secureUrlSigned = <span class="kw">await</span> kUrlObfushortnerSecure.<span class="fn">encodeSecure</span>(
+  longUrl,
+  publicKeyPem,
+  { hmacSecret: <span class="str">'your-shared-hmac-secret'</span> }
+);
+<span class="cm">// → "https://example.com/?_ks=Abc123...&_kh=XyzSig..."</span></pre>
+          <button class="copy-btn" onclick="copySnippet('snip-js-enc', this)">Copy</button>
+        </div>
+      </div>
+
+      <div class="doc-card mt-3">
+        <div class="doc-card-lang">JavaScript — Browser (AJAX decode pattern)</div>
+        <h3>Send encrypted token to server, receive decoded URL</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-js-ajax"><span class="cm">// Pattern B: page loads with ?_ks= param, sends to a server endpoint,</span>
+<span class="cm">// server decrypts and returns original query string as JSON.</span>
+
+<span class="kw">async function</span> <span class="fn">applySecureDecodedUrl</span>() {
+  <span class="kw">const</span> params    = <span class="kw">new</span> <span class="ty">URLSearchParams</span>(window.location.search);
+  <span class="kw">const</span> encrypted = params.<span class="fn">get</span>(<span class="str">'_ks'</span>);
+  <span class="kw">if</span> (!encrypted) <span class="kw">return</span>;
+
+  <span class="kw">try</span> {
+    <span class="kw">const</span> response = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">'/api/kurl-decode'</span>, {
+      method:  <span class="str">'POST'</span>,
+      headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+      body:    <span class="ty">JSON</span>.<span class="fn">stringify</span>({ token: encrypted })
+    });
+    <span class="kw">if</span> (!response.ok) <span class="kw">throw new</span> <span class="ty">Error</span>(<span class="str">'Decode failed'</span>);
+
+    <span class="kw">const</span> { decodedUrl } = <span class="kw">await</span> response.<span class="fn">json</span>();
+
+    <span class="cm">// Option 1: Redirect to decoded URL</span>
+    window.location.<span class="fn">replace</span>(decodedUrl);
+
+    <span class="cm">// Option 2: Update address bar only (no reload)</span>
+    <span class="cm">// window.history.replaceState(null, '', decodedUrl);</span>
+
+    <span class="cm">// Option 3: Fire an event for the app to handle</span>
+    <span class="cm">// window.dispatchEvent(new CustomEvent('kurl:decoded', { detail: { decodedUrl } }));</span>
+  } <span class="kw">catch</span> (err) {
+    console.<span class="fn">error</span>(<span class="str">'kUrlObfushortner-secure: decode failed'</span>, err);
+  }
+}
+
+document.<span class="fn">addEventListener</span>(<span class="str">'DOMContentLoaded'</span>, applySecureDecodedUrl);</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-js-ajax', this)">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Node.js Server tab ─────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-node">
+      <div class="doc-card">
+        <div class="doc-card-lang">Node.js — Express (Pattern A: URL arrives at server)</div>
+        <h3>Middleware: decrypt _ks on arrival, rewrite req.url</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-node-a"><span class="kw">const</span> crypto = <span class="fn">require</span>(<span class="str">'crypto'</span>);
+<span class="kw">const</span> pako   = <span class="fn">require</span>(<span class="str">'pako'</span>);
+<span class="kw">const</span> fs     = <span class="fn">require</span>(<span class="str">'fs'</span>);
+
+<span class="kw">const</span> privateKeyPem = fs.<span class="fn">readFileSync</span>(<span class="str">'/etc/secrets/private.pem'</span>, <span class="str">'utf8'</span>);
+
+<span class="kw">function</span> <span class="fn">kurlSecureDecode</span>(encryptedToken) {
+  <span class="cm">// 1. URL-safe Base64 → Buffer</span>
+  <span class="kw">const</span> b64      = encryptedToken.<span class="fn">replace</span>(/-/g, <span class="str">'+'</span>).<span class="fn">replace</span>(/_/g, <span class="str">'/'</span>);
+  <span class="kw">const</span> pad      = <span class="str">'='</span>.<span class="fn">repeat</span>((4 - b64.length % 4) % 4);
+  <span class="kw">const</span> cipher   = <span class="ty">Buffer</span>.<span class="fn">from</span>(b64 + pad, <span class="str">'base64'</span>);
+
+  <span class="cm">// 2. RSA-OAEP decrypt</span>
+  <span class="kw">const</span> plain    = crypto.<span class="fn">privateDecrypt</span>(
+    { key: privateKeyPem, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: <span class="str">'sha256'</span> },
+    cipher
+  );
+
+  <span class="cm">// 3. Drop the version byte (0x02), then raw DEFLATE inflate the rest.</span>
+  <span class="cm">//    plain is raw bytes: [0x02, ...deflateRaw(qs)] — not a _k token.</span>
+  <span class="kw">const</span> comp     = plain.<span class="fn">subarray</span>(1);
+  <span class="kw">const</span> qs       = pako.<span class="fn">inflateRaw</span>(comp, { to: <span class="str">'string'</span> });
+  <span class="kw">return</span> qs; <span class="cm">// e.g. "?foo=bar&baz=qux"</span>
+}
+
+<span class="cm">// Express middleware</span>
+app.<span class="fn">use</span>((req, res, next) => {
+  <span class="kw">const</span> ks = req.query._ks;
+  <span class="kw">if</span> (ks) {
+    <span class="kw">try</span> {
+      <span class="kw">const</span> qs  = <span class="fn">kurlSecureDecode</span>(ks);
+      req.url   = req.path + qs;
+      req.query = <span class="ty">Object</span>.<span class="fn">fromEntries</span>(<span class="kw">new</span> <span class="ty">URLSearchParams</span>(qs));
+    } <span class="kw">catch</span> (e) { console.<span class="fn">error</span>(<span class="str">'kurl-secure decode error'</span>, e); }
+  }
+  <span class="fn">next</span>();
+});</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-node-a', this)">Copy</button>
+        </div>
+      </div>
+
+      <div class="doc-card mt-3">
+        <div class="doc-card-lang">Node.js — Express (Pattern B: AJAX decode endpoint)</div>
+        <h3>POST /api/kurl-decode → returns decodedUrl JSON</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-node-b">app.<span class="fn">post</span>(<span class="str">'/api/kurl-decode'</span>, express.<span class="fn">json</span>(), (req, res) => {
+  <span class="kw">const</span> { token } = req.body;
+  <span class="kw">if</span> (!token) <span class="kw">return</span> res.<span class="fn">status</span>(400).<span class="fn">json</span>({ error: <span class="str">'Missing token'</span> });
+
+  <span class="kw">try</span> {
+    <span class="kw">const</span> qs         = <span class="fn">kurlSecureDecode</span>(token);
+    <span class="kw">const</span> decodedUrl = <span class="str">`https://</span>${req.headers.host}${req.path}<span class="str">`</span> + qs;
+    res.<span class="fn">json</span>({ decodedUrl, queryString: qs });
+  } <span class="kw">catch</span> (e) {
+    res.<span class="fn">status</span>(400).<span class="fn">json</span>({ error: <span class="str">'Decryption failed'</span> });
+  }
+});</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-node-b', this)">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PHP tab ────────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-php">
+      <div class="doc-card">
+        <div class="doc-card-lang">PHP 8+ — Pattern A (direct arrival)</div>
+        <h3>Decrypt _ks in a PHP page/controller on arrival</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-php-a"><span class="cm">&lt;?php</span>
+<span class="cm">// Requires: php-zlib (default) + the openssl CLI on PATH.</span>
+<span class="cm">// Store your private key outside the web root!</span>
+<span class="cm">//</span>
+<span class="cm">// The browser uses RSA-OAEP with SHA-256, but PHP's openssl_private_decrypt()</span>
+<span class="cm">// only does OAEP with SHA-1 (no way to change it). So we shell out to the</span>
+<span class="cm">// openssl CLI, which lets us set rsa_oaep_md:sha256. (phpseclib also works.)</span>
+
+<span class="kw">function</span> <span class="fn">kurlSecureDecode</span>(<span class="ty">string</span> $token): <span class="ty">string</span> {
+  <span class="cm">// 1. URL-safe Base64 → binary ciphertext</span>
+  $pad    = <span class="fn">str_repeat</span>(<span class="str">'='</span>, (4 - <span class="fn">strlen</span>($token) % 4) % 4);
+  $cipher = <span class="fn">base64_decode</span>(<span class="fn">strtr</span>($token . $pad, <span class="str">'-_'</span>, <span class="str">'+/'</span>));
+
+  <span class="cm">// 2. RSA-OAEP (SHA-256) decrypt via the openssl CLI; ciphertext via stdin</span>
+  $cmd  = [<span class="str">'openssl'</span>, <span class="str">'pkeyutl'</span>, <span class="str">'-decrypt'</span>,
+           <span class="str">'-inkey'</span>, <span class="str">'/etc/secrets/private.pem'</span>,
+           <span class="str">'-pkeyopt'</span>, <span class="str">'rsa_padding_mode:oaep'</span>,
+           <span class="str">'-pkeyopt'</span>, <span class="str">'rsa_oaep_md:sha256'</span>,
+           <span class="str">'-pkeyopt'</span>, <span class="str">'rsa_mgf1_md:sha256'</span>];
+  $spec = [0 =&gt; [<span class="str">'pipe'</span>, <span class="str">'r'</span>], 1 =&gt; [<span class="str">'pipe'</span>, <span class="str">'w'</span>], 2 =&gt; [<span class="str">'pipe'</span>, <span class="str">'w'</span>]];
+  $proc = <span class="fn">proc_open</span>($cmd, $spec, $pipes);
+  <span class="fn">fwrite</span>($pipes[0], $cipher);
+  <span class="fn">fclose</span>($pipes[0]);
+  $plain = <span class="fn">stream_get_contents</span>($pipes[1]);
+  <span class="fn">fclose</span>($pipes[1]); <span class="fn">fclose</span>($pipes[2]);
+  <span class="kw">if</span> (<span class="fn">proc_close</span>($proc) !== 0) {
+    <span class="kw">throw new</span> <span class="ty">RuntimeException</span>(<span class="str">'RSA-OAEP decrypt failed'</span>);
+  }
+
+  <span class="cm">// 3. Drop the version byte (0x02), then raw DEFLATE inflate the rest.</span>
+  <span class="cm">//    $plain is raw bytes: chr(0x02) . deflateRaw(qs) — not a _k token.</span>
+  $qs = <span class="fn">gzinflate</span>(<span class="fn">substr</span>($plain, 1));
+
+  <span class="kw">return</span> $qs; <span class="cm">// e.g. "?foo=bar&baz=qux"</span>
+}
+
+<span class="cm">// Pattern A: use on page arrival</span>
+<span class="kw">if</span> (!<span class="fn">empty</span>($_GET[<span class="str">'_ks'</span>])) {
+  $qs = <span class="fn">kurlSecureDecode</span>($_GET[<span class="str">'_ks'</span>]);
+  <span class="fn">parse_str</span>(<span class="fn">ltrim</span>($qs, <span class="str">'?'</span>), $_GET);
+  <span class="cm">// Now $_GET contains the original parameters</span>
+}</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-php-a', this)">Copy</button>
+        </div>
+      </div>
+
+      <div class="doc-card mt-3">
+        <div class="doc-card-lang">PHP 8+ — Pattern B (AJAX decode endpoint)</div>
+        <h3>POST /api/kurl-decode.php → JSON response</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-php-b"><span class="cm">&lt;?php</span>
+<span class="cm">// kurl-decode.php — AJAX endpoint</span>
+<span class="fn">header</span>(<span class="str">'Content-Type: application/json'</span>);
+
+<span class="kw">if</span> ($_SERVER[<span class="str">'REQUEST_METHOD'</span>] !== <span class="str">'POST'</span>) {
+  <span class="fn">http_response_code</span>(405);
+  <span class="kw">exit</span>(<span class="fn">json_encode</span>([<span class="str">'error'</span> => <span class="str">'Method not allowed'</span>]));
+}
+
+$body  = <span class="fn">json_decode</span>(<span class="fn">file_get_contents</span>(<span class="str">'php://input'</span>), <span class="kw">true</span>);
+$token = $body[<span class="str">'token'</span>] ?? <span class="kw">null</span>;
+
+<span class="kw">if</span> (!$token) {
+  <span class="fn">http_response_code</span>(400);
+  <span class="kw">exit</span>(<span class="fn">json_encode</span>([<span class="str">'error'</span> => <span class="str">'Missing token'</span>]));
+}
+
+<span class="kw">try</span> {
+  $qs         = <span class="fn">kurlSecureDecode</span>($token);
+  $decodedUrl = <span class="str">'https://'</span> . $_SERVER[<span class="str">'HTTP_HOST'</span>]
+              . <span class="fn">strtok</span>($_SERVER[<span class="str">'HTTP_REFERER'</span>], <span class="str">'?'</span>)
+              . $qs;
+  <span class="kw">echo</span> <span class="fn">json_encode</span>([
+    <span class="str">'decodedUrl'</span>  => $decodedUrl,
+    <span class="str">'queryString'</span> => $qs,
+  ]);
+} <span class="kw">catch</span> (<span class="ty">Throwable</span> $e) {
+  <span class="fn">http_response_code</span>(400);
+  <span class="kw">echo</span> <span class="fn">json_encode</span>([<span class="str">'error'</span> => <span class="str">'Decryption failed'</span>]);
+}</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-php-b', this)">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Python tab ─────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-python">
+      <div class="doc-card">
+        <div class="doc-card-lang">Python 3 — Flask (Pattern A: direct arrival)</div>
+        <h3>Decrypt _ks in a Flask route</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-py-a"><span class="cm"># pip install cryptography flask</span>
+<span class="kw">import</span> zlib, base64
+<span class="kw">from</span> cryptography.hazmat.primitives <span class="kw">import</span> hashes, serialization
+<span class="kw">from</span> cryptography.hazmat.primitives.asymmetric <span class="kw">import</span> padding
+<span class="kw">from</span> flask <span class="kw">import</span> Flask, request, jsonify
+
+app = Flask(__name__)
+
+<span class="kw">with</span> <span class="fn">open</span>(<span class="str">'/etc/secrets/private.pem'</span>, <span class="str">'rb'</span>) <span class="kw">as</span> f:
+    private_key = serialization.<span class="fn">load_pem_private_key</span>(f.<span class="fn">read</span>(), password=<span class="kw">None</span>)
+
+<span class="kw">def</span> <span class="fn">kurl_secure_decode</span>(token: <span class="ty">str</span>) -> <span class="ty">str</span>:
+    <span class="cm"># 1. URL-safe Base64 → bytes</span>
+    pad      = <span class="str">'='</span> * ((4 - <span class="fn">len</span>(token) % 4) % 4)
+    cipher   = base64.<span class="fn">urlsafe_b64decode</span>(token + pad)
+
+    <span class="cm"># 2. RSA-OAEP decrypt</span>
+    plain    = private_key.<span class="fn">decrypt</span>(
+        cipher,
+        padding.<span class="fn">OAEP</span>(
+            mgf=padding.<span class="fn">MGF1</span>(algorithm=hashes.<span class="fn">SHA256</span>()),
+            algorithm=hashes.<span class="fn">SHA256</span>(),
+            label=<span class="kw">None</span>
+        )
+    )
+
+    <span class="cm"># 3. Drop the version byte (0x02), then raw DEFLATE inflate the rest.</span>
+    <span class="cm">#    plain is raw bytes: bytes([0x02]) + deflate_raw(qs) — not a _k token.</span>
+    comp     = plain[1:]
+    qs       = zlib.<span class="fn">decompress</span>(comp, -15).<span class="fn">decode</span>()
+    <span class="kw">return</span> qs  <span class="cm"># e.g. "?foo=bar&baz=qux"</span>
+
+<span class="cm"># Pattern A: Flask route that auto-decodes _ks</span>
+<span class="fn">@app.before_request</span>
+<span class="kw">def</span> <span class="fn">decode_secure_url</span>():
+    token = request.args.<span class="fn">get</span>(<span class="str">'_ks'</span>)
+    <span class="kw">if</span> token:
+        <span class="kw">from</span> urllib.parse <span class="kw">import</span> parse_qs
+        qs_str = <span class="fn">kurl_secure_decode</span>(token).<span class="fn">lstrip</span>(<span class="str">'?'</span>)
+        request.decoded_args = <span class="fn">parse_qs</span>(qs_str)
+
+<span class="cm"># Pattern B: AJAX decode endpoint</span>
+<span class="fn">@app.route</span>(<span class="str">'/api/kurl-decode'</span>, methods=[<span class="str">'POST'</span>])
+<span class="kw">def</span> <span class="fn">kurl_decode_endpoint</span>():
+    token = request.<span class="fn">get_json</span>().<span class="fn">get</span>(<span class="str">'token'</span>)
+    <span class="kw">if not</span> token:
+        <span class="kw">return</span> <span class="fn">jsonify</span>(error=<span class="str">'Missing token'</span>), 400
+    <span class="kw">try</span>:
+        qs = <span class="fn">kurl_secure_decode</span>(token)
+        <span class="kw">return</span> <span class="fn">jsonify</span>(queryString=qs, decodedUrl=request.host_url + qs)
+    <span class="kw">except Exception</span> <span class="kw">as</span> e:
+        <span class="kw">return</span> <span class="fn">jsonify</span>(error=<span class="str">'Decryption failed'</span>), 400</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-py-a', this)">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── C# tab ─────────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-csharp">
+      <div class="doc-card">
+        <div class="doc-card-lang">C# / ASP.NET Core (Pattern A + B)</div>
+        <h3>Middleware + controller endpoint</h3>
+        <div class="code-wrap">
+          <pre class="code-block" id="snip-cs-a"><span class="kw">using</span> System.IO.Compression;
+<span class="kw">using</span> System.Security.Cryptography;
+<span class="kw">using</span> System.Text;
+
+<span class="kw">public static class</span> <span class="ty">KUrlSecure</span>
+{
+  <span class="kw">private static readonly string</span> _privKeyPem =
+    File.<span class="fn">ReadAllText</span>(<span class="str">"/etc/secrets/private.pem"</span>);
+
+  <span class="kw">public static string</span> <span class="fn">Decode</span>(<span class="kw">string</span> encryptedToken)
+  {
+    <span class="cm">// 1. URL-safe Base64 → bytes</span>
+    <span class="kw">var</span> b64    = encryptedToken.<span class="fn">Replace</span>(<span class="str">'-'</span>, <span class="str">'+'</span>).<span class="fn">Replace</span>(<span class="str">'_'</span>, <span class="str">'/'</span>);
+    <span class="kw">var</span> pad    = <span class="kw">new string</span>(<span class="str">'='</span>, (4 - b64.Length % 4) % 4);
+    <span class="kw">var</span> cipher = <span class="ty">Convert</span>.<span class="fn">FromBase64String</span>(b64 + pad);
+
+    <span class="cm">// 2. RSA-OAEP decrypt</span>
+    <span class="kw">using var</span> rsa    = <span class="ty">RSA</span>.<span class="fn">Create</span>();
+    rsa.<span class="fn">ImportFromPem</span>(_privKeyPem);
+    <span class="kw">var</span> plainBytes   = rsa.<span class="fn">Decrypt</span>(cipher, <span class="ty">RSAEncryptionPadding</span>.OaepSHA256);
+
+    <span class="cm">// 3. Drop the version byte (0x02), then raw DEFLATE inflate the rest.</span>
+    <span class="cm">//    plainBytes is raw: [0x02, ...deflateRaw(qs)] — not a _k token.</span>
+    <span class="kw">var</span> compressed   = plainBytes[1..];
+
+    <span class="kw">using var</span> ms     = <span class="kw">new</span> <span class="ty">MemoryStream</span>(compressed);
+    <span class="kw">using var</span> ds     = <span class="kw">new</span> <span class="ty">DeflateStream</span>(ms, <span class="ty">CompressionMode</span>.Decompress);
+    <span class="kw">using var</span> sr     = <span class="kw">new</span> <span class="ty">StreamReader</span>(ds, <span class="ty">Encoding</span>.UTF8);
+    <span class="kw">return</span> sr.<span class="fn">ReadToEnd</span>(); <span class="cm">// "?foo=bar&baz=qux"</span>
+  }
+}
+
+<span class="cm">// Pattern A: ASP.NET Core middleware</span>
+app.<span class="fn">Use</span>(<span class="kw">async</span> (context, next) => {
+  <span class="kw">if</span> (context.Request.Query.<span class="fn">ContainsKey</span>(<span class="str">"_ks"</span>)) {
+    <span class="kw">var</span> qs = <span class="ty">KUrlSecure</span>.<span class="fn">Decode</span>(context.Request.Query[<span class="str">"_ks"</span>]!);
+    context.Request.QueryString = <span class="kw">new</span> <span class="ty">QueryString</span>(qs);
+  }
+  <span class="kw">await</span> <span class="fn">next</span>(context);
+});
+
+<span class="cm">// Pattern B: minimal API endpoint</span>
+app.<span class="fn">MapPost</span>(<span class="str">"/api/kurl-decode"</span>, (<span class="ty">DecodeRequest</span> req) => {
+  <span class="kw">try</span> {
+    <span class="kw">var</span> qs = <span class="ty">KUrlSecure</span>.<span class="fn">Decode</span>(req.Token);
+    <span class="kw">return</span> <span class="ty">Results</span>.<span class="fn">Ok</span>(<span class="kw">new</span> { queryString = qs });
+  } <span class="kw">catch</span> {
+    <span class="kw">return</span> <span class="ty">Results</span>.<span class="fn">BadRequest</span>(<span class="kw">new</span> { error = <span class="str">"Decryption failed"</span> });
+  }
+});
+
+<span class="kw">record</span> <span class="ty">DecodeRequest</span>(<span class="ty">string</span> Token);</pre>
+          <button class="copy-btn" onclick="copySnippet('snip-cs-a', this)">Copy</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════════════════════════════════════════ SECTION 13 ═══ -->
+  <section class="section" id="sec-secure-api">
+    <div class="section-header">
+      <span class="section-num">13</span>
+      <h2>Secure Plugin — JS API Reference</h2>
+      <span class="secure-badge">🔒</span>
+    </div>
+    <div class="panel">
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Parameters</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>encodeSecure(url, pubKey, opts?)</td>
+            <td><code>url: string, publicKeyPem: string, options?: { hmacSecret? }</code></td>
+            <td><code>Promise&lt;string&gt;</code></td>
+            <td>DEFLATE-compress then RSA-OAEP encrypt. Returns URL with <code>?_ks=</code> param.</td>
+          </tr>
+          <tr>
+            <td>decodeSecure_TEST_ONLY(url, privKey)</td>
+            <td><code>url: string, privateKeyPem: string</code></td>
+            <td><code>Promise&lt;string&gt;</code></td>
+            <td>⚠ Testing only — decrypt client-side. Never expose private keys in production.</td>
+          </tr>
+          <tr>
+            <td>generateKeyPair(bits?)</td>
+            <td><code>modulusLength?: 2048 | 4096</code></td>
+            <td><code>Promise&lt;{ publicKeyPem, privateKeyPem }&gt;</code></td>
+            <td>Generate a fresh RSA-OAEP key pair via Web Crypto. Returns PEM strings.</td>
+          </tr>
+          <tr>
+            <td>verifyHmac(url, secret)</td>
+            <td><code>url: string, hmacSecret: string</code></td>
+            <td><code>Promise&lt;boolean&gt;</code></td>
+            <td>Verify the <code>?_kh=</code> HMAC-SHA256 integrity signature.</td>
+          </tr>
+          <tr>
+            <td>stats(url, pubKey)</td>
+            <td><code>url: string, publicKeyPem: string</code></td>
+            <td><code>Promise&lt;object&gt;</code></td>
+            <td>Returns <code>{ longLen, compressedLen, secureLen, ... }</code> for all three forms.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container footer-bar">
+    <span>kUrlObfushortner &nbsp;·&nbsp; v0.1</span>
+    <span class="text-dim">Base: DEFLATE + Base64 &nbsp;·&nbsp; Secure: RSA-OAEP + Web Crypto</span>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════ SCRIPTS ═══ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="kUrlObfushortner.js"></script>
+<script src="kUrlObfushortner-secure.js"></script>
+<script>
+
+  /* ── Example data ──────────────────────────────────────────────────── */
+  const EXAMPLE_LONG_URL =
+    'https://kastrack.github.io/Driving-Cost-Calculator/?region=us&metric=mpg_us&dist=762&hwy=99&mpg_h=32&mpg_c=24&price=3.89&priceD=4.20&priceE=0.18&kwh_h=28&kwh_c=32&priceMode=gas%2Celectric&o=San+Francisco%2C+California%2C+United+States&d=Los+Angeles%2C+California%2C+United+States';
+
+  /* ── Boot: check for incoming _k param ─────────────────────────────── */
+  document.addEventListener('DOMContentLoaded', () => {
+    const result = kUrlObfushortner.applyDecodedUrl({ replaceAddressBar: false });
+    if (result) {
+      document.getElementById('alert-original').textContent = result.original;
+      document.getElementById('alert-decoded').textContent  = result.decoded;
+      document.getElementById('incoming-alert').classList.add('visible');
+      // Smooth scroll to the alert
+      document.getElementById('incoming-alert').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Pre-populate builder base URL with the current page URL (minus qs)
+    const base = window.location.origin + window.location.pathname;
+    document.getElementById('builder-base').value = base;
+  });
+
+  /* ── Demo 1: Encode ─────────────────────────────────────────────────── */
+  function runEncode() {
+    const input = document.getElementById('encode-input').value.trim();
+    if (!input) { alert('Please enter a URL to encode.'); return; }
+
+    let s;
+    try {
+      s = kUrlObfushortner.stats(input);
+    } catch(e) {
+      alert('Error: ' + e.message);
+      return;
+    }
+
+    const block  = document.getElementById('encode-result');
+    const output = document.getElementById('encode-output');
+
+    output.textContent = '';
+    const link = document.createElement('a');
+    link.href   = s.shortUrl;
+    link.target = '_blank';
+    link.textContent = s.shortUrl;
+    output.appendChild(link);
+
+    setStatEl('encode-len-orig', s.longLen,   null);
+    setStatEl('encode-len-comp', s.shortLen,  null);
+    setStatEl('encode-saved',    s.saving,     s.saving >= 0 ? 'positive' : 'negative');
+    document.getElementById('encode-pct').textContent =
+      (s.saving >= 0 ? '−' : '+') + Math.abs(s.savingPct) + '%';
+    document.getElementById('encode-pct').className =
+      'stat-value ' + (s.saving >= 0 ? 'positive' : 'negative');
+
+    block.classList.add('visible');
+  }
+
+  /* ── Demo 2: Decode ─────────────────────────────────────────────────── */
+  function runDecode() {
+    const input = document.getElementById('decode-input').value.trim();
+    if (!input) { alert('Please enter a compressed URL to decode.'); return; }
+
+    let decoded;
+    try {
+      decoded = kUrlObfushortner.decode(input);
+    } catch(e) {
+      alert('Error: ' + e.message);
+      return;
+    }
+
+    const block  = document.getElementById('decode-result');
+    document.getElementById('decode-output').textContent = decoded;
+    setStatEl('decode-len-comp', input.length,   null);
+    setStatEl('decode-len-orig', decoded.length, null);
+    block.classList.add('visible');
+  }
+
+  /* ── Demo 3: Builder ────────────────────────────────────────────────── */
+  function updateBuilder() {
+    const base = document.getElementById('builder-base').value.trim();
+    const qs   = document.getElementById('builder-qs').value.trim();
+
+    if (!base) { alert('Please enter a base URL.'); return; }
+
+    const originalUrl = qs ? base + '?' + qs : base;
+    let compressed;
+    try {
+      compressed = kUrlObfushortner.encode(originalUrl);
+    } catch(e) {
+      alert('Error: ' + e.message);
+      return;
+    }
+
+    document.getElementById('builder-original').textContent = originalUrl;
+    document.getElementById('builder-orig-len').textContent =
+      originalUrl.length + ' characters';
+
+    const compEl = document.getElementById('builder-compressed');
+    compEl.innerHTML = '';
+    const a = document.createElement('a');
+    a.href    = compressed;
+    a.target  = '_blank';
+    a.textContent = compressed;
+    compEl.appendChild(a);
+
+    const saving = originalUrl.length - compressed.length;
+    const pct    = originalUrl.length > 0
+      ? ((saving / originalUrl.length) * 100).toFixed(1)
+      : '0.0';
+    const sign   = saving >= 0 ? '−' : '+';
+    document.getElementById('builder-comp-stats').innerHTML =
+      `<span class="text-hi">${compressed.length}</span> characters` +
+      ` &nbsp;·&nbsp; ` +
+      `<span class="${saving >= 0 ? 'text-green' : 'text-red'}">` +
+      `${sign}${Math.abs(saving)} chars (${sign}${Math.abs(pct)}%)</span>`;
+
+    document.getElementById('builder-previews').style.display = 'block';
+  }
+
+  /* ── Load example data ──────────────────────────────────────────────── */
+  function loadExample(demo) {
+    if (demo === 'encode') {
+      document.getElementById('encode-input').value = EXAMPLE_LONG_URL;
+    } else if (demo === 'decode') {
+      try {
+        document.getElementById('decode-input').value =
+          kUrlObfushortner.encode(EXAMPLE_LONG_URL);
+      } catch(e) { alert(e.message); }
+    } else if (demo === 'builder') {
+      const parsed = new URL(EXAMPLE_LONG_URL);
+      document.getElementById('builder-base').value =
+        parsed.origin + parsed.pathname;
+      document.getElementById('builder-qs').value = parsed.search.slice(1);
+      updateBuilder();
+    }
+  }
+
+  /* ── Helpers ────────────────────────────────────────────────────────── */
+  function setStatEl(id, value, cls) {
+    const el = document.getElementById(id);
+    el.textContent = value;
+    el.className   = 'stat-value' + (cls ? ' ' + cls : '');
+  }
+
+  function copySnippet(id, btn) {
+    const pre = document.getElementById(id);
+    const text = pre.innerText || pre.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 1800);
+    });
+  }
+
+  function copyText(id, btn) {
+    const el   = document.getElementById(id);
+    const text = el.innerText || el.textContent;
+    navigator.clipboard.writeText(text.trim()).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+    });
+  }
+
+  /* ── Base: tab switcher ─────────────────────────────────────────────── */
+  function switchBaseTab(name) {
+    document.querySelectorAll('#base-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel[id^="btab-"]').forEach(p => p.classList.remove('active'));
+    document.querySelector(`#base-tabs .tab-btn[onclick="switchBaseTab('${name}')"]`).classList.add('active');
+    document.getElementById('btab-' + name).classList.add('active');
+  }
+
+  /* ── Secure: tab switcher ───────────────────────────────────────────── */
+  function switchTab(name) {
+    document.querySelectorAll('#secure-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(p => p.classList.remove('active'));
+    document.querySelector(`#secure-tabs .tab-btn[onclick="switchTab('${name}')"]`).classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  /* ── Secure: key generation ─────────────────────────────────────────── */
+  let _generatedPublicKey = null;
+
+  /* Web Crypto (SubtleCrypto) is only exposed in a secure context. Surface a
+     clear, two-case message in the demo before falling through to the library. */
+  function ensureWebCrypto() {
+    if (window.crypto && window.crypto.subtle) return true;
+    if (!window.crypto) {
+      alert('This browser does not expose the Web Crypto API. Use a modern browser.');
+    } else {
+      alert(
+        'This needs SubtleCrypto, which browsers only expose in a secure context.\n\n' +
+        'Open the page over HTTPS or via http://localhost (http://127.0.0.1 works too).\n' +
+        'It will NOT work from a file:// URL or over http:// on a LAN IP/hostname.'
+      );
+    }
+    return false;
+  }
+
+  async function generateKeys(bits) {
+    if (!ensureWebCrypto()) return;
+    const spinner = document.getElementById('keygen-spinner');
+    spinner.style.display = 'inline';
+    try {
+      const { publicKeyPem, privateKeyPem } = await kUrlObfushortnerSecure.generateKeyPair(bits);
+      _generatedPublicKey = publicKeyPem;
+      document.getElementById('pub-key-display').textContent  = publicKeyPem;
+      document.getElementById('priv-key-display').textContent = privateKeyPem;
+      document.getElementById('keygen-output').classList.add('visible');
+    } catch(e) {
+      alert('Key generation failed: ' + e.message);
+    } finally {
+      spinner.style.display = 'none';
+    }
+  }
+
+  function useGeneratedKey() {
+    if (!_generatedPublicKey) {
+      alert('Generate a key pair in §09 first.');
+      return;
+    }
+    document.getElementById('secure-pubkey').value = _generatedPublicKey;
+  }
+
+  /* ── Secure: encode demo ────────────────────────────────────────────── */
+  async function runSecureEncode() {
+    if (!ensureWebCrypto()) return;
+    const pubkey = document.getElementById('secure-pubkey').value.trim();
+    const url    = document.getElementById('secure-url-input').value.trim();
+
+    if (!pubkey) { alert('Please enter or generate a public key.'); return; }
+    if (!url)    { alert('Please enter a URL to encrypt.'); return; }
+
+    // Pre-flight: measure compressed size so we can give a useful error
+    const m = kUrlObfushortnerSecure.measureCompressed(url);
+    if (m && !m.fitsIn4096) {
+      alert('This URL\'s query string compresses to ' + m.plaintextLen + ' bytes, ' +
+            'which exceeds the maximum even for a 4096-bit RSA key (446 bytes). ' +
+            'Consider a server-side short-code approach for URLs this large.');
+      return;
+    }
+
+    const btn = document.querySelector('#sec-secure-demo-encode .btn-primary');
+    btn.textContent = '⟳ Encrypting…';
+    btn.disabled = true;
+
+    try {
+      const s = await kUrlObfushortnerSecure.stats(url, pubkey);
+      const meas = s.measurement;
+
+      const block  = document.getElementById('secure-encode-result');
+      const output = document.getElementById('secure-encode-output');
+      output.textContent = s.secureUrl;
+
+      document.getElementById('se-len-orig').textContent      = s.longLen + ' chars';
+      document.getElementById('se-deflate-bytes').textContent = meas.compressedLen + ' bytes';
+      document.getElementById('se-plaintext-bytes').textContent = meas.plaintextLen + ' bytes';
+      document.getElementById('se-key-needed').textContent    =
+        meas.fitsIn2048 ? '2048-bit ✓' : meas.fitsIn4096 ? '4096-bit ✓' : 'Too large';
+      document.getElementById('se-len-enc').textContent       = s.secureLen + ' chars';
+
+      block.classList.add('visible');
+    } catch(e) {
+      alert('Encryption error: ' + e.message);
+    } finally {
+      btn.textContent = '🔒 Encrypt URL';
+      btn.disabled = false;
+    }
+  }
+
+</script>
+</body>
+</html>
