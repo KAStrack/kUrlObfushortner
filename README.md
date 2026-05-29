@@ -6,6 +6,8 @@ Compress long query strings using DEFLATE + URL-safe Base64 into a single `?_k=`
 
 **Current version:** 0.1
 
+**[View the Demo →](https://kastrack.github.io/kUrlObfushortner/)**
+
 ---
 
 ## Contents
